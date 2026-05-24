@@ -16,9 +16,9 @@ from app.models import PaymentRequest, PaymentResponse, ErrorResponse
 from app.store import IdempotencyStore
 
 
-# ---------------------------------------------------------------------------
+
 # Application lifespan (startup / shutdown)
-# ---------------------------------------------------------------------------
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -33,9 +33,8 @@ async def lifespan(app: FastAPI):
         pass
 
 
-# ---------------------------------------------------------------------------
 # App instance
-# ---------------------------------------------------------------------------
+# 
 
 app = FastAPI(
     title="Idempotency Gateway",
@@ -48,9 +47,9 @@ app = FastAPI(
 app.state.store = IdempotencyStore(ttl_seconds=3600)
 
 
-# ---------------------------------------------------------------------------
+
 # Helpers
-# ---------------------------------------------------------------------------
+
 
 def _body_hash(body: dict) -> str:
     """Return a stable SHA-256 fingerprint for a request body dict."""
@@ -58,10 +57,8 @@ def _body_hash(body: dict) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
+#  Routes
+ 
 @app.get("/health", tags=["Meta"])
 async def health_check():
     """Quick liveness probe."""
@@ -104,7 +101,7 @@ async def process_payment(
     body_dict = payload.model_dump()
     incoming_hash = _body_hash(body_dict)
 
-    # ── 1. Check for an already-completed entry ──────────────────────────────
+    # 1. Check for an already-completed entry 
     existing = await store.get(idempotency_key)
 
     if existing is not None and existing["status"] != "in-flight":
@@ -122,7 +119,7 @@ async def process_payment(
             headers=headers,
         )
 
-    # ── 2. In-flight handling (race condition / concurrent retry) ────────────
+    # 2. In-flight handling (race condition / concurrent retry) 
     if existing is not None and existing["status"] == "in-flight":
         # Another coroutine is already processing this key.
         # Wait (with a timeout) for it to finish, then return its result.
@@ -143,7 +140,7 @@ async def process_payment(
             detail="Original request is still processing. Please retry shortly.",
         )
 
-    # ── 3. Acquire a per-key lock to prevent simultaneous new processing ──────
+    # 3. Acquire a per-key lock to prevent simultaneous new processing 
     async with store.acquire_lock(idempotency_key):
         # Double-check after acquiring the lock (another waiter may have
         # already populated the entry while we were queued).
@@ -164,10 +161,10 @@ async def process_payment(
         # Mark as in-flight so concurrent duplicates know to wait.
         await store.set_in_flight(idempotency_key, incoming_hash)
 
-        # ── 4. Simulate payment processing (2-second delay) ──────────────────
+        # 4. Simulate payment processing (2-second delay)
         await asyncio.sleep(2)
 
-        # ── 5. Build and persist the response ────────────────────────────────
+        # 5. Build and persist the response 
         response_body = {
             "message": f"Charged {payload.amount:g} {payload.currency}",
             "idempotency_key": idempotency_key,
