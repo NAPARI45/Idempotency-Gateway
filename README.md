@@ -184,13 +184,13 @@ The request body is serialised with `sort_keys=True` before hashing, so key orde
 
 ---
 
-## Developer's Choice — TTL-Based Key Expiry
+## Developer's Choice : TTL-Based Key Expiry
 
 The `IdempotencyStore` expires records after 1 hour (configurable). Every `get()` lazily evicts stale records; a background task sweeps the store every 5 minutes.
 
 **Why it matters:**
 - Prevents unbounded memory growth under high volume.
-- Bounds the replay window — a leaked key cannot trigger a payment replay years later.
+- Bounds the replay window : a leaked key cannot trigger a payment replay years later.
 - Matches industry practice: Stripe expires keys after 24 hours.
 
 ---
