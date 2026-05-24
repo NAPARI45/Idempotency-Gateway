@@ -1,4 +1,4 @@
-# Idempotency-Gateway — The "Pay-Once" Protocol
+# Idempotency-Gateway: The "Pay-Once" Protocol
 
 A production-grade Python/FastAPI service that ensures payment requests are processed **exactly once**, no matter how many times a client retries.
 
@@ -173,7 +173,7 @@ curl -X POST http://localhost:8000/process-payment \
 
 ## Design Decisions
 
-### 1. `asyncio.Lock` per Key — Race Condition Safety
+### 1. `asyncio.Lock` per Key : Race Condition Safety
 Each key gets its own lock created on-demand. A concurrent duplicate detects the `in-flight` state and polls every 100 ms rather than acquiring the lock, ensuring the payment logic runs exactly once.
 
 ### 2. SHA-256 Body Hashing
