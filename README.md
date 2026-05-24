@@ -223,15 +223,15 @@ idempotency-gateway/
 
 | Test | Coverage |
 |---|---|
-| `test_first_request_returns_201` | Story 1 — Happy Path |
-| `test_first_request_no_cache_hit_header` | Story 1 — Happy Path |
-| `test_duplicate_returns_same_response` | Story 2 — Idempotency |
-| `test_duplicate_has_cache_hit_header` | Story 2 — Idempotency |
-| `test_conflict_on_different_body` | Story 3 — Fraud/Error Check |
+| `test_first_request_returns_201` | Story 1 Happy Path |
+| `test_first_request_no_cache_hit_header` | Story 1 Happy Path |
+| `test_duplicate_returns_same_response` | Story 2 Idempotency |
+| `test_duplicate_has_cache_hit_header` | Story 2 Idempotency |
+| `test_conflict_on_different_body` | Story 3 Fraud/Error Check |
 | `test_missing_idempotency_key_returns_422` | Validation |
 | `test_invalid_amount_returns_422` | Validation |
-| `test_concurrent_requests_processed_once` | Bonus — Race Condition |
-| `test_expired_key_is_reprocessed` | Developer's Choice — TTL |
+| `test_concurrent_requests_processed_once` | Bonus Race Condition |
+| `test_expired_key_is_reprocessed` | Developer's Choice TTL |
 | `test_health_check` | Meta |
 
 
