@@ -1,10 +1,11 @@
 """
-Payments router — handles POST /process-payment..
+Payments router — handles POST /process-payment.
+
 """
 
 import asyncio
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.dependencies import body_hash, get_store
@@ -19,6 +20,7 @@ router = APIRouter(tags=["Payments"])
     status_code=201,
     response_model=PaymentResponse,
     responses={
+        409: {"model": ErrorResponse, "description": "Key reused with a different request body"},
         422: {"model": ErrorResponse, "description": "Validation error — missing header or bad body"},
     },
 )
@@ -32,14 +34,27 @@ async def process_payment(
     ),
 ):
     """
-    Process a new payment and persist the result.
+    Process a payment exactly once.
 
-    Acquires a per-key lock, marks the record as in-flight, simulates
-    a 2-second processing delay, then saves and returns the result.
+    * New key               → process (2 s delay) + persist → 201 Created
+    * Same key + same body  → return cached response         → X-Cache-Hit: true
+    * Same key + diff body  → reject                         → 409 Conflict
     """
     incoming_hash = body_hash(payload.model_dump())
 
+    # Fast path: key already completed 
+    existing = await store.get(idempotency_key)
+
+    if existing is not None and existing["status"] == "complete":
+        return _replay_or_conflict(existing, incoming_hash)
+
+    #New key :acquire lock, process, persist
     async with store.acquire_lock(idempotency_key):
+        # Double-check after acquiring the lock.
+        existing = await store.get(idempotency_key)
+        if existing is not None and existing["status"] == "complete":
+            return _replay_or_conflict(existing, incoming_hash)
+
         await store.set_in_flight(idempotency_key, incoming_hash)
         response_body = await _run_payment(payload, idempotency_key)
         await store.set_complete(
@@ -50,6 +65,24 @@ async def process_payment(
         )
 
     return JSONResponse(content=response_body, status_code=201)
+
+
+
+# Private helpers
+
+
+def _replay_or_conflict(existing: dict, incoming_hash: str) -> JSONResponse:
+    """Return the cached response, or raise 409 if the body has changed."""
+    if existing["body_hash"] != incoming_hash:
+        raise HTTPException(
+            status_code=409,
+            detail="Idempotency key already used for a different request body.",
+        )
+    return JSONResponse(
+        content=existing["response"],
+        status_code=existing["status_code"],
+        headers={"X-Cache-Hit": "true"},
+    )
 
 
 async def _run_payment(payload: PaymentRequest, idempotency_key: str) -> dict:
