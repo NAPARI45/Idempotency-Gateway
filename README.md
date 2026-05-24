@@ -149,10 +149,12 @@ curl -X POST http://localhost:8000/process-payment \
 #### Scenario B — Duplicate Request
 
 ```bash
-# Same command repeated — returns cached result instantly
+curl -X POST http://localhost:8000/process-payment \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: a1b2c3d4-e5f6-7890-abcd-ef1234567890" \
+  -d '{"amount": 100, "currency": "GHS"}'
 ```
-
-**Response `201 Created`** with header `X-Cache-Hit: true`
+Response `201 Created`** with header `X-Cache-Hit: true`
 
 #### Scenario C — Conflict
 
