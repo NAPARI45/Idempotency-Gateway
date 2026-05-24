@@ -114,8 +114,8 @@ Submit a payment for processing.
 
 | Header            | Required | Description                                      |
 |-------------------|----------|--------------------------------------------------|
-| `Idempotency-Key` | ✅ Yes   | Client-generated UUID identifying this attempt  |
-| `Content-Type`    | ✅ Yes   | `application/json`                               |
+| `Idempotency-Key` | Yes   | Client-generated UUID identifying this attempt  |
+| `Content-Type`    | Yes   | `application/json`                               |
 
 **Request Body**
 
