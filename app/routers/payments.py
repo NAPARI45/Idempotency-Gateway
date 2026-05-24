@@ -4,6 +4,7 @@ Payments router — handles POST /process-payment.
 """
 
 import asyncio
+import time
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
@@ -22,6 +23,7 @@ router = APIRouter(tags=["Payments"])
     responses={
         409: {"model": ErrorResponse, "description": "Key reused with a different request body"},
         422: {"model": ErrorResponse, "description": "Validation error — missing header or bad body"},
+        425: {"model": ErrorResponse, "description": "Request still in-flight — retry shortly"},
     },
 )
 async def process_payment(
@@ -36,19 +38,24 @@ async def process_payment(
     """
     Process a payment exactly once.
 
-    * New key               → process (2 s delay) + persist → 201 Created
-    * Same key + same body  → return cached response         → X-Cache-Hit: true
-    * Same key + diff body  → reject                         → 409 Conflict
+    * New key               → process (2 s delay) + persist  → 201 Created
+    * Same key + same body  → return cached response          → X-Cache-Hit: true
+    * Same key + diff body  → reject                          → 409 Conflict
+    * Same key in-flight    → poll until done, return result  → X-In-Flight-Wait: true
     """
     incoming_hash = body_hash(payload.model_dump())
 
-    # Fast path: key already completed 
+    # 1. Fast path: already completed
     existing = await store.get(idempotency_key)
 
     if existing is not None and existing["status"] == "complete":
         return _replay_or_conflict(existing, incoming_hash)
 
-    #New key :acquire lock, process, persist
+    # 2. In-flight: another coroutine is mid-processing this key
+    if existing is not None and existing["status"] == "in-flight":
+        return await _wait_for_in_flight(store, idempotency_key)
+
+    # 3. New key : acquire lock, process, persist
     async with store.acquire_lock(idempotency_key):
         # Double-check after acquiring the lock.
         existing = await store.get(idempotency_key)
@@ -82,6 +89,34 @@ def _replay_or_conflict(existing: dict, incoming_hash: str) -> JSONResponse:
         content=existing["response"],
         status_code=existing["status_code"],
         headers={"X-Cache-Hit": "true"},
+    )
+
+
+async def _wait_for_in_flight(
+    store: IdempotencyStore,
+    key: str,
+    timeout: float = 10.0,
+    poll_interval: float = 0.1,
+) -> JSONResponse:
+    """
+    Poll the store until the in-flight request completes (or times out).
+
+    Returns the completed response with both X-Cache-Hit and
+    X-In-Flight-Wait headers so the caller can distinguish this case.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        await asyncio.sleep(poll_interval)
+        refreshed = await store.get(key)
+        if refreshed and refreshed["status"] == "complete":
+            return JSONResponse(
+                content=refreshed["response"],
+                status_code=refreshed["status_code"],
+                headers={"X-Cache-Hit": "true", "X-In-Flight-Wait": "true"},
+            )
+    raise HTTPException(
+        status_code=425,
+        detail="Original request is still processing. Please retry shortly.",
     )
 
 
